@@ -15,23 +15,24 @@ provider "aws" {
   region = var.aws_region
 }
 
-# ❌ PROBLEMA 1: Bucket S3 con acceso público de lectura
-# Checkov: CKV_AWS_20 — S3 Bucket has an ACL defined which allows public READ access
-resource "aws_s3_bucket" "app_data" {
-  bucket = "${var.project_name}-data-${var.environment}"
-  tags   = var.common_tags
-}
-
-resource "aws_s3_bucket_acl" "app_data" {
+# ✅SOLUCIÓN 1: Bucket privado con versioning y cifrado:
+resource "aws_s3_bucket_versioning" "app_data" {
   bucket = aws_s3_bucket.app_data.id
-  acl    = "public-read"
+  versioning_configuration {
+    status = "Enabled"
+  }
 }
 
-# ❌ PROBLEMA 2: Sin versioning en el bucket
-# Checkov: CKV_AWS_21 — Ensure all data stored in the S3 bucket have versioning enabled
+resource "aws_s3_bucket_server_side_encryption_configuration" "app_data" {
+  bucket = aws_s3_bucket.app_data.id
+  rule {
+    apply_server_side_encryption_by_default {
+      sse_algorithm = "aws:kms"
+    }
+  }
+}
 
-# ❌ PROBLEMA 3: Base de datos accesible desde internet
-# Checkov: CKV_AWS_17 — Ensure all data stored in the RDS instance is not publicly accessible
+# ✅SOLUCIÓN 3: Base de datos privada y cifrada
 resource "aws_db_instance" "app_db" {
   identifier          = "${var.project_name}-db-${var.environment}"
   engine              = "mysql"
@@ -42,31 +43,26 @@ resource "aws_db_instance" "app_db" {
   username            = "admin"
   password            = var.db_password
   skip_final_snapshot = true
-
-  # ❌ PROBLEMA 3: Base de datos accesible públicamente desde internet
-  publicly_accessible = true
-
-  # ❌ PROBLEMA 4: Almacenamiento sin cifrar
-  # Checkov: CKV_AWS_16 — Ensure all data stored in the RDS instance is securely encrypted
-  storage_encrypted = false
-
+  publicly_accessible = false
+  storage_encrypted   = true
+  kms_key_id          = aws_kms_key.rds.arn
   tags = var.common_tags
 }
 
-# ❌ PROBLEMA 5: Security group que permite todo el tráfico entrante
-# Checkov: CKV_AWS_25 — Ensure no security groups allow ingress from 0.0.0.0:0 to port 22
+# ✅SOLUCIÓN: Security group con reglas específicas
 resource "aws_security_group" "web_sg" {
   name        = "${var.project_name}-web-sg"
   description = "Security group for web application servers"
 
+  # ✅ Corregido: solo HTTPS desde internet
   ingress {
-    description = "Allow all inbound traffic"
-    from_port   = 0
-    to_port     = 65535
+    description = "HTTPS desde internet"
+    from_port   = 443
+    to_port     = 443
     protocol    = "tcp"
     cidr_blocks = ["0.0.0.0/0"]
   }
-
+  # Sin regla de ingress para los puertos 0-65535
   egress {
     from_port   = 0
     to_port     = 0
