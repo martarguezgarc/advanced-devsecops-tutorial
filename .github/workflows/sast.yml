@@ -21,6 +21,6 @@ jobs:
       image: semgrep/semgrep:latest
     steps:
       # ✅ MEJORA 3: Pinear action a SHA completo (inmutable, no puede cambiar)
-      - uses: actions/checkout@1cab25176edc388f8ba39283e87c3d4794550ff2 # v4.2.2
+      - uses: actions/checkout@3db226045f3f52a2c77f98560a82190f7c0f849c # v4.2.2
       - name: Ejecutar Semgrep
         run: semgrep scan --config=auto --error src/
